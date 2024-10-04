@@ -9,18 +9,27 @@ def load_data(zip_file_path):
             train_df = pd.read_csv(train_file)
         with z.open('test.csv') as test_file:
             test_df = pd.read_csv(test_file)
-    pd.set_option('display.max_columns', None)
-    print(train_df.head())
-    print(test_df.head())
+    return train_df, test_df
 
+
+def add_basic_features(df):
+    df['response_a_length'] = df['response_a'].apply(len)
+    df['response_b_length'] = df['response_b'].apply(len)
+    return df
 
 if __name__ == '__main__':
-    # data pre-processing:
-    # load dataset
-    load_data('data/lmsys-chatbot-arena.zip')
+    # Load dataset
+    train_df, test_df = load_data('data/lmsys-chatbot-arena.zip')
 
-    # inspect and clean data including proper formatting
-    # no need to clean because of how this dataset was constructed (no missing values)
+    # Add basic features like response length
+    train_df = add_basic_features(train_df)
+    test_df = add_basic_features(test_df)
+
+    # Set pandas to display all columns for inspection
+    pd.set_option('display.max_columns', None)
+
+    # Inspect the modified training data with new features
+    print(train_df.head())
 
 # Feature Engineering:
 # extract useful features from the text data, such as:
