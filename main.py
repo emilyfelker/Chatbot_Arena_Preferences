@@ -1,9 +1,17 @@
 import pandas as pd
 import zipfile
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import log_loss, confusion_matrix
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 
+## TODO:
+# make submission output file
+# unbias dataset
 
 def load_data(zip_file_path):
-    zip_file_path = 'data/lmsys-chatbot-arena.zip'
     with zipfile.ZipFile(zip_file_path, 'r') as z:
         with z.open('train.csv') as train_file:
             train_df = pd.read_csv(train_file)
@@ -15,9 +23,105 @@ def load_data(zip_file_path):
 def add_basic_features(df):
     df['response_a_length'] = df['response_a'].apply(len)
     df['response_b_length'] = df['response_b'].apply(len)
+    df['length_difference'] = df['response_a_length'] - df['response_b_length']
     return df
 
-if __name__ == '__main__':
+
+def prepare_data(train_df):
+    features = ['response_a_length', 'response_b_length', 'length_difference']
+
+    # Multi-class target: 0 = Model A wins, 1 = Model B wins, 2 = Tie
+    def get_target(row):
+        if row['winner_model_a'] == 1:
+            return 0  # Model A wins
+        elif row['winner_model_b'] == 1:
+            return 1  # Model B wins
+        else:
+            return 2  # Tie
+
+    train_df['target'] = train_df.apply(get_target, axis=1)
+
+    X = train_df[features]
+    y = train_df['target']
+
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+    return X_train, X_val, y_train, y_val
+
+
+def train_model(X_train, y_train):
+    # Use LogisticRegression with multi-class support (using softmax under the hood)
+    model = LogisticRegression(solver='lbfgs', max_iter=1000)
+    model.fit(X_train, y_train)
+    return model
+
+
+def evaluate_model(model, X_val, y_val):
+    # Predict probabilities for each class for the validation set
+    y_val_pred_proba = model.predict_proba(X_val)
+
+    # Compute the multi-class log loss
+    loss = log_loss(y_val, y_val_pred_proba)
+    print(f'Validation Log Loss: {loss}')
+
+    # Predict actual class labels
+    y_val_pred = model.predict(X_val)
+
+    # Confusion Matrix
+    cm = confusion_matrix(y_val, y_val_pred)
+    plot_confusion_matrix(cm)
+
+
+def plot_confusion_matrix(cm, filename='confusion_matrix.png'):
+    # Rearrange the confusion matrix to have "tie" in the middle
+    # Original order: [Model A Wins, Model B Wins, Tie]
+    # New order: [Model A Wins, Tie, Model B Wins]
+    reordered_cm = cm[[0, 2, 1]][:, [0, 2, 1]]  # Reorder rows and columns
+
+    # Normalize the confusion matrix by dividing each row by the sum of that row
+    cm_relative = reordered_cm.astype('float') / reordered_cm.sum(axis=1)[:, np.newaxis]
+
+    # Labels for the confusion matrix
+    labels = ['Model A Wins', 'Tie', 'Model B Wins']
+
+    # Create heatmap for confusion matrix with relative counts
+    sns.heatmap(cm_relative, annot=True, fmt='.2%', cmap='Blues', xticklabels=labels, yticklabels=labels)
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.title('Confusion Matrix (Relative Counts)')
+
+    # Save the plot to a file
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+
+    # Clear the plot to avoid overlapping plots in future calls
+    plt.clf()
+
+
+def make_predictions(model, test_df):
+    # Add the same features to the test set
+    test_df = add_basic_features(test_df)
+
+    # Extract features for prediction
+    features = ['response_a_length', 'response_b_length', 'length_difference']
+    X_test = test_df[features]
+
+    # Predict probabilities for the test set
+    y_test_pred_proba = model.predict_proba(X_test)
+
+    # Assign the most likely class as the predicted result (optional)
+    y_test_pred = np.argmax(y_test_pred_proba, axis=1)
+
+    # Create a submission dataframe
+    submission_df = test_df[['id']].copy()
+    submission_df['winner_model_a'] = y_test_pred_proba[:, 0]  # Probability of Model A winning
+    submission_df['winner_model_b'] = y_test_pred_proba[:, 1]  # Probability of Model B winning
+    submission_df['winner_model_tie'] = y_test_pred_proba[:, 2]  # Probability of a tie
+
+    print(submission_df.head())
+    return submission_df
+
+
+def main():
     # Load dataset
     train_df, test_df = load_data('data/lmsys-chatbot-arena.zip')
 
@@ -25,25 +129,18 @@ if __name__ == '__main__':
     train_df = add_basic_features(train_df)
     test_df = add_basic_features(test_df)
 
-    # Set pandas to display all columns for inspection
-    pd.set_option('display.max_columns', None)
+    # Prepare data for training
+    X_train, X_val, y_train, y_val = prepare_data(train_df)
 
-    # Inspect the modified training data with new features
-    print(train_df.head())
+    # Train model
+    model = train_model(X_train, y_train)
 
-# Feature Engineering:
-# extract useful features from the text data, such as:
-# text embeddings (using pre-trained models like BERT, GPT, etc.)
-# handcrafted features like response length, sentiment analysis, verbosity, or other response-level characteristics.
-# consider including metadata (e.g., the prompt, position of the response)
+    # Evaluate model
+    evaluate_model(model, X_val, y_val)
 
-# model selection for classification
+    # Make predictions on the test set
+    submission = make_predictions(model, test_df)
 
-# train model
-# use techniques such as cross-validation to ensure the model is generalizing well.
-# monitor the model's performance on the validation set using log loss as the evaluation metric
 
-# evaluate model
-# test the model on unseen data and compute the log loss to measure performance.
-# compare the predicted probabilities against the actual user preferences to assess accuracy
-
+if __name__ == '__main__':
+    main()
