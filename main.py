@@ -8,7 +8,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 ## TODO:
-# make submission output file
+# add a ton of features
 # unbias dataset
 
 def load_data(zip_file_path):
@@ -108,9 +108,6 @@ def make_predictions(model, test_df):
     # Predict probabilities for the test set
     y_test_pred_proba = model.predict_proba(X_test)
 
-    # Assign the most likely class as the predicted result (optional)
-    y_test_pred = np.argmax(y_test_pred_proba, axis=1)
-
     # Create a submission dataframe
     submission_df = test_df[['id']].copy()
     submission_df['winner_model_a'] = y_test_pred_proba[:, 0]  # Probability of Model A winning
@@ -119,6 +116,11 @@ def make_predictions(model, test_df):
 
     print(submission_df.head())
     return submission_df
+
+
+def create_submission_file(submission_df, filename='sample_submission.csv'):
+    submission_df.to_csv(filename, index=False)
+    print(f'Submission file saved as {filename}')
 
 
 def main():
@@ -140,6 +142,9 @@ def main():
 
     # Make predictions on the test set
     submission = make_predictions(model, test_df)
+
+    # Create and save the submission file
+    create_submission_file(submission)
 
 
 if __name__ == '__main__':
