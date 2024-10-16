@@ -1,15 +1,13 @@
 import pandas as pd
 import zipfile
+import re
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, confusion_matrix
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-
-## TODO:
-# add a ton of features
-# unbias dataset
+from sklearn.preprocessing import StandardScaler
 
 def load_data(zip_file_path):
     try:
@@ -26,19 +24,149 @@ def load_data(zip_file_path):
         train_df = pd.read_csv('/kaggle/input/lmsys-chatbot-arena/train.csv')
         test_df = pd.read_csv('/kaggle/input/lmsys-chatbot-arena/test.csv')
         print("Data loaded from /input folder.")
-
     return train_df, test_df
 
 
+def count_syllables(word):
+    word = word.lower()
+    word = re.sub(r'[^a-z]', '', word)  # Remove non-alphabetic characters
+    vowels = "aeiouy"
+    syllable_count = 0
+    prev_char_was_vowel = False
+    if len(word) == 0:
+        return 0
+    for idx, char in enumerate(word):
+        if char in vowels:
+            if not prev_char_was_vowel:
+                syllable_count += 1
+                prev_char_was_vowel = True
+        else:
+            prev_char_was_vowel = False
+    if word.endswith("e") and not word.endswith("le") and syllable_count > 1:
+        syllable_count -= 1
+    return syllable_count
+
+
+def calculate_readability(row, col_prefix):
+    words = row[f'{col_prefix}_word_list']
+    sentences = max(row[f'{col_prefix}_sentence_count'], 1)
+    syllables = row[f'{col_prefix}_syllable_count']
+    words_count = max(len(words), 1)
+
+    # Flesch Reading Ease
+    fre = 206.835 - 1.015 * (words_count / sentences) - 84.6 * (syllables / words_count)
+
+    # Flesch-Kincaid Grade Level
+    fkgl = 0.39 * (words_count / sentences) + 11.8 * (syllables / words_count) - 15.59
+
+    return pd.Series({f'{col_prefix}_flesch_reading_ease': fre, f'{col_prefix}_flesch_kincaid_grade': fkgl})
+
+
 def add_basic_features(df):
-    df['response_a_length'] = df['response_a'].apply(len)
-    df['response_b_length'] = df['response_b'].apply(len)
-    df['length_difference'] = df['response_a_length'] - df['response_b_length']
+    for col in ['prompt', 'response_a', 'response_b']:
+        # Character Count
+        df[f'{col}_char_count'] = df[col].str.len()
+
+        # Word List and Word Count
+        df[f'{col}_word_list'] = df[col].str.findall(r'\b\w+\b')
+        df[f'{col}_word_count'] = df[f'{col}_word_list'].str.len()
+
+        # Sentence Count
+        df[f'{col}_sentence_count'] = df[col].str.count(r'[.!?]+')
+        df[f'{col}_sentence_count'] = df[f'{col}_sentence_count'].replace(0, 1)  # Avoid division by zero
+
+        # Average Word Length
+        df[f'{col}_avg_word_length'] = df[f'{col}_char_count'] / df[f'{col}_word_count'].replace(0, np.nan)
+
+        # Average Sentence Length (in words)
+        df[f'{col}_avg_sentence_length'] = df[f'{col}_word_count'] / df[f'{col}_sentence_count']
+
+        # Punctuation Counts
+        df[f'{col}_exclamation_count'] = df[col].str.count('!')
+        df[f'{col}_question_count'] = df[col].str.count(r'\?')  # Use raw string
+        df[f'{col}_comma_count'] = df[col].str.count(',')
+        df[f'{col}_period_count'] = df[col].str.count(r'\.')   # Use raw string
+        df[f'{col}_semicolon_count'] = df[col].str.count(';')
+        df[f'{col}_colon_count'] = df[col].str.count(':')
+
+        # Personal Pronoun Counts
+        df[f'{col}_pronoun_I_count'] = df[col].str.count(r'\bI\b', flags=re.IGNORECASE)
+        df[f'{col}_pronoun_you_count'] = df[col].str.count(r'\byou\b', flags=re.IGNORECASE)
+        df[f'{col}_pronoun_we_count'] = df[col].str.count(r'\bwe\b', flags=re.IGNORECASE)
+
+        # Type-Token Ratio
+        df[f'{col}_type_token_ratio'] = df[f'{col}_word_list'].apply(lambda x: len(set(x)) / max(len(x), 1))
+
+        # Syllable Count
+        df[f'{col}_syllable_count'] = df[f'{col}_word_list'].apply(lambda words: sum(count_syllables(word) for word in words))
+
+        # Readability Scores
+        #readability_scores = df.apply(lambda row: calculate_readability(row, col), axis=1).reset_index(drop=True)
+        #df = pd.concat([df.reset_index(drop=True), readability_scores], axis=1)
+
+    # Ensure readability columns are present and check for missing columns
+    #for col in ['response_a_flesch_reading_ease', 'response_b_flesch_reading_ease',
+    #            'response_a_flesch_kincaid_grade', 'response_b_flesch_kincaid_grade']:
+    #    if col not in df.columns:
+    #        print(f"Warning: Column {col} not found in the DataFrame! Filling with NaN.")
+    #        df[col] = np.nan
+
+    # Replace inplace fillna with assignment to prevent SettingWithCopyWarning
+    #df['response_a_flesch_reading_ease'] = df['response_a_flesch_reading_ease'].fillna(np.nan)
+    #df['response_b_flesch_reading_ease'] = df['response_b_flesch_reading_ease'].fillna(np.nan)
+    #df['response_a_flesch_kincaid_grade'] = df['response_a_flesch_kincaid_grade'].fillna(np.nan)
+    #df['response_b_flesch_kincaid_grade'] = df['response_b_flesch_kincaid_grade'].fillna(np.nan)
+
+    # Check for consistent lengths before calculating differences
+    #if len(df['response_a_flesch_reading_ease']) == len(df['response_b_flesch_reading_ease']):
+    #    df['flesch_reading_ease_difference'] = df['response_a_flesch_reading_ease'] - df['response_b_flesch_reading_ease']
+    #else:
+    #    print("Error: Readability columns have different lengths!")
+
+    #if len(df['response_a_flesch_kincaid_grade']) == len(df['response_b_flesch_kincaid_grade']):
+    #    df['flesch_kincaid_grade_difference'] = df['response_a_flesch_kincaid_grade'] - df['response_b_flesch_kincaid_grade']
+    #else:
+    #    print("Error: Readability grade columns have different lengths!")
+
+    # Differences between responses (Model A - Model B)
+    df['char_count_difference'] = df['response_a_char_count'] - df['response_b_char_count']
+    df['word_count_difference'] = df['response_a_word_count'] - df['response_b_word_count']
+    df['sentence_count_difference'] = df['response_a_sentence_count'] - df['response_b_sentence_count']
+    df['avg_word_length_difference'] = df['response_a_avg_word_length'] - df['response_b_avg_word_length']
+    df['avg_sentence_length_difference'] = df['response_a_avg_sentence_length'] - df['response_b_avg_sentence_length']
+    df['exclamation_count_difference'] = df['response_a_exclamation_count'] - df['response_b_exclamation_count']
+    df['question_count_difference'] = df['response_a_question_count'] - df['response_b_question_count']
+    df['pronoun_I_count_difference'] = df['response_a_pronoun_I_count'] - df['response_b_pronoun_I_count']
+    df['pronoun_you_count_difference'] = df['response_a_pronoun_you_count'] - df['response_b_pronoun_you_count']
+    df['type_token_ratio_difference'] = df['response_a_type_token_ratio'] - df['response_b_type_token_ratio']
+    df['syllable_count_difference'] = df['response_a_syllable_count'] - df['response_b_syllable_count']
+
+    # Ratios involving prompt and responses
+    df['response_a_char_count_to_prompt_char_count_ratio'] = df['response_a_char_count'] / df['prompt_char_count'].replace(0, np.nan)
+    df['response_b_char_count_to_prompt_char_count_ratio'] = df['response_b_char_count'] / df['prompt_char_count'].replace(0, np.nan)
+
+    # Ratios between responses (Model A to Model B)
+    df['response_a_char_count_to_response_b_char_count_ratio'] = df['response_a_char_count'] / df['response_b_char_count'].replace(0, np.nan)
+    df['response_a_word_count_to_response_b_word_count_ratio'] = df['response_a_word_count'] / df['response_b_word_count'].replace(0, np.nan)
+    df['response_a_sentence_count_to_response_b_sentence_count_ratio'] = df['response_a_sentence_count'] / df['response_b_sentence_count'].replace(0, np.nan)
+
+    # Clean up temporary columns
+    df.drop(columns=[col for col in df.columns if '_word_list' in col], inplace=True)
+
     return df
 
 
 def prepare_data(train_df):
-    features = ['response_a_length', 'response_b_length', 'length_difference']
+    # Select features
+    feature_cols = [col for col in train_df.columns if any(keyword in col for keyword in [
+        '_char_count', '_word_count', '_sentence_count',
+        '_avg_word_length', '_avg_sentence_length',
+        '_exclamation_count', '_question_count', '_comma_count', '_period_count',
+        '_semicolon_count', '_colon_count', '_pronoun_I_count', '_pronoun_you_count',
+        '_pronoun_we_count', '_type_token_ratio', '_syllable_count',
+        '_flesch_reading_ease', '_flesch_kincaid_grade',
+        '_difference', '_ratio'
+    ])]
 
     # Multi-class target: 0 = Model A wins, 1 = Model B wins, 2 = Tie
     def get_target(row):
@@ -51,23 +179,31 @@ def prepare_data(train_df):
 
     train_df['target'] = train_df.apply(get_target, axis=1)
 
-    X = train_df[features]
+    X = train_df[feature_cols]
     y = train_df['target']
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    # Handle any NaN values
+    X = X.fillna(0)
 
-    return X_train, X_val, y_train, y_val
+    # Scale the features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_scaled, y, test_size=0.2, random_state=42, stratify=y)
+
+    return X_train, X_val, y_train, y_val, scaler
 
 
 def train_model(X_train, y_train):
-    # Use LogisticRegression with multi-class support (using softmax under the hood)
-    model = LogisticRegression(solver='lbfgs', max_iter=1000)
+    # Use LogisticRegression with multi-class support
+    model = LogisticRegression(solver='lbfgs', max_iter=2000)
     model.fit(X_train, y_train)
     return model
 
 
 def evaluate_model(model, X_val, y_val):
-    # Predict probabilities for each class for the validation set
+    # Predict probabilities for the validation set
     y_val_pred_proba = model.predict_proba(X_val)
 
     # Compute the multi-class log loss
@@ -83,10 +219,11 @@ def evaluate_model(model, X_val, y_val):
 
 
 def plot_confusion_matrix(cm, filename='confusion_matrix.png'):
-    # Rearrange the confusion matrix to have "tie" in the middle
+    # Rearrange the confusion matrix to have "Tie" in the middle
     # Original order: [Model A Wins, Model B Wins, Tie]
     # New order: [Model A Wins, Tie, Model B Wins]
-    reordered_cm = cm[[0, 2, 1]][:, [0, 2, 1]]  # Reorder rows and columns
+    reordered_indices = [0, 2, 1]
+    reordered_cm = cm[reordered_indices][:, reordered_indices]
 
     # Normalize the confusion matrix by dividing each row by the sum of that row
     cm_relative = reordered_cm.astype('float') / reordered_cm.sum(axis=1)[:, np.newaxis]
@@ -107,16 +244,29 @@ def plot_confusion_matrix(cm, filename='confusion_matrix.png'):
     plt.clf()
 
 
-def make_predictions(model, test_df):
-    # Add the same features to the test set
+def make_predictions(model, test_df, scaler):
+    # Add features to the test set
     test_df = add_basic_features(test_df)
 
-    # Extract features for prediction
-    features = ['response_a_length', 'response_b_length', 'length_difference']
-    X_test = test_df[features]
+    # Select the same features used for training
+    feature_cols = [col for col in test_df.columns if any(keyword in col for keyword in [
+        '_char_count', '_word_count', '_sentence_count',
+        '_avg_word_length', '_avg_sentence_length',
+        '_exclamation_count', '_question_count', '_comma_count', '_period_count',
+        '_semicolon_count', '_colon_count', '_pronoun_I_count', '_pronoun_you_count',
+        '_pronoun_we_count', '_type_token_ratio', '_syllable_count',
+        '_flesch_reading_ease', '_flesch_kincaid_grade',
+        '_difference', '_ratio'
+    ])]
+
+    # Handle any NaN values
+    X_test = test_df[feature_cols].fillna(0)
+
+    # Scale the test data using the same scaler
+    X_test_scaled = scaler.transform(X_test)
 
     # Predict probabilities for the test set
-    y_test_pred_proba = model.predict_proba(X_test)
+    y_test_pred_proba = model.predict_proba(X_test_scaled)
 
     # Create a submission dataframe
     submission_df = test_df[['id']].copy()
@@ -124,7 +274,6 @@ def make_predictions(model, test_df):
     submission_df['winner_model_b'] = y_test_pred_proba[:, 1]  # Probability of Model B winning
     submission_df['winner_model_tie'] = y_test_pred_proba[:, 2]  # Probability of a tie
 
-    print(submission_df.head())
     return submission_df
 
 
@@ -137,12 +286,12 @@ def main():
     # Load dataset
     train_df, test_df = load_data('data/lmsys-chatbot-arena.zip')
 
-    # Add basic features like response length
+    # Add features
     train_df = add_basic_features(train_df)
     test_df = add_basic_features(test_df)
 
     # Prepare data for training
-    X_train, X_val, y_train, y_val = prepare_data(train_df)
+    X_train, X_val, y_train, y_val, scaler = prepare_data(train_df)
 
     # Train model
     model = train_model(X_train, y_train)
@@ -150,8 +299,8 @@ def main():
     # Evaluate model
     evaluate_model(model, X_val, y_val)
 
-    # Make predictions on the test set
-    submission = make_predictions(model, test_df)
+    # Prepare test data
+    submission = make_predictions(model, test_df, scaler)
 
     # Create and save the submission file
     create_submission_file(submission)
