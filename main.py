@@ -9,6 +9,13 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 
+## TODO:
+# fix readability feature
+# try different models
+# unbias dataset
+# feature importance plot
+# streamline code
+
 def load_data(zip_file_path):
     try:
         # First attempt to load data from the zip file (local environment)
