@@ -8,11 +8,13 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
+import textstat
 
 ## TODO:
-# fix readability feature
+# do differences and ratios for all combinations
+# unbias dataset: with the input triplets of resp_a, resp_b, prompt and mod_a_wins, mod_b_wins, tie, create a
+# reversed/flipped dataset and add this to the training set
 # try different models
-# unbias dataset
 # feature importance plot
 # streamline code
 
@@ -32,42 +34,6 @@ def load_data(zip_file_path):
         test_df = pd.read_csv('/kaggle/input/lmsys-chatbot-arena/test.csv')
         print("Data loaded from /input folder.")
     return train_df, test_df
-
-
-def count_syllables(word):
-    word = word.lower()
-    word = re.sub(r'[^a-z]', '', word)  # Remove non-alphabetic characters
-    vowels = "aeiouy"
-    syllable_count = 0
-    prev_char_was_vowel = False
-    if len(word) == 0:
-        return 0
-    for idx, char in enumerate(word):
-        if char in vowels:
-            if not prev_char_was_vowel:
-                syllable_count += 1
-                prev_char_was_vowel = True
-        else:
-            prev_char_was_vowel = False
-    if word.endswith("e") and not word.endswith("le") and syllable_count > 1:
-        syllable_count -= 1
-    return syllable_count
-
-
-def calculate_readability(row, col_prefix):
-    words = row[f'{col_prefix}_word_list']
-    sentences = max(row[f'{col_prefix}_sentence_count'], 1)
-    syllables = row[f'{col_prefix}_syllable_count']
-    words_count = max(len(words), 1)
-
-    # Flesch Reading Ease
-    fre = 206.835 - 1.015 * (words_count / sentences) - 84.6 * (syllables / words_count)
-
-    # Flesch-Kincaid Grade Level
-    fkgl = 0.39 * (words_count / sentences) + 11.8 * (syllables / words_count) - 15.59
-
-    return pd.Series({f'{col_prefix}_flesch_reading_ease': fre, f'{col_prefix}_flesch_kincaid_grade': fkgl})
-
 
 def add_basic_features(df):
     for col in ['prompt', 'response_a', 'response_b']:
@@ -90,9 +56,9 @@ def add_basic_features(df):
 
         # Punctuation Counts
         df[f'{col}_exclamation_count'] = df[col].str.count('!')
-        df[f'{col}_question_count'] = df[col].str.count(r'\?')  # Use raw string
+        df[f'{col}_question_count'] = df[col].str.count(r'\?')
         df[f'{col}_comma_count'] = df[col].str.count(',')
-        df[f'{col}_period_count'] = df[col].str.count(r'\.')   # Use raw string
+        df[f'{col}_period_count'] = df[col].str.count(r'\.')
         df[f'{col}_semicolon_count'] = df[col].str.count(';')
         df[f'{col}_colon_count'] = df[col].str.count(':')
 
@@ -104,36 +70,9 @@ def add_basic_features(df):
         # Type-Token Ratio
         df[f'{col}_type_token_ratio'] = df[f'{col}_word_list'].apply(lambda x: len(set(x)) / max(len(x), 1))
 
-        # Syllable Count
-        df[f'{col}_syllable_count'] = df[f'{col}_word_list'].apply(lambda words: sum(count_syllables(word) for word in words))
-
-        # Readability Scores
-        #readability_scores = df.apply(lambda row: calculate_readability(row, col), axis=1).reset_index(drop=True)
-        #df = pd.concat([df.reset_index(drop=True), readability_scores], axis=1)
-
-    # Ensure readability columns are present and check for missing columns
-    #for col in ['response_a_flesch_reading_ease', 'response_b_flesch_reading_ease',
-    #            'response_a_flesch_kincaid_grade', 'response_b_flesch_kincaid_grade']:
-    #    if col not in df.columns:
-    #        print(f"Warning: Column {col} not found in the DataFrame! Filling with NaN.")
-    #        df[col] = np.nan
-
-    # Replace inplace fillna with assignment to prevent SettingWithCopyWarning
-    #df['response_a_flesch_reading_ease'] = df['response_a_flesch_reading_ease'].fillna(np.nan)
-    #df['response_b_flesch_reading_ease'] = df['response_b_flesch_reading_ease'].fillna(np.nan)
-    #df['response_a_flesch_kincaid_grade'] = df['response_a_flesch_kincaid_grade'].fillna(np.nan)
-    #df['response_b_flesch_kincaid_grade'] = df['response_b_flesch_kincaid_grade'].fillna(np.nan)
-
-    # Check for consistent lengths before calculating differences
-    #if len(df['response_a_flesch_reading_ease']) == len(df['response_b_flesch_reading_ease']):
-    #    df['flesch_reading_ease_difference'] = df['response_a_flesch_reading_ease'] - df['response_b_flesch_reading_ease']
-    #else:
-    #    print("Error: Readability columns have different lengths!")
-
-    #if len(df['response_a_flesch_kincaid_grade']) == len(df['response_b_flesch_kincaid_grade']):
-    #    df['flesch_kincaid_grade_difference'] = df['response_a_flesch_kincaid_grade'] - df['response_b_flesch_kincaid_grade']
-    #else:
-    #    print("Error: Readability grade columns have different lengths!")
+        # Readability Scores using textstat
+        df[f'{col}_flesch_reading_ease'] = df[col].apply(lambda text: textstat.flesch_reading_ease(text) if isinstance(text, str) else np.nan)
+        df[f'{col}_flesch_kincaid_grade'] = df[col].apply(lambda text: textstat.flesch_kincaid_grade(text) if isinstance(text, str) else np.nan)
 
     # Differences between responses (Model A - Model B)
     df['char_count_difference'] = df['response_a_char_count'] - df['response_b_char_count']
@@ -146,7 +85,8 @@ def add_basic_features(df):
     df['pronoun_I_count_difference'] = df['response_a_pronoun_I_count'] - df['response_b_pronoun_I_count']
     df['pronoun_you_count_difference'] = df['response_a_pronoun_you_count'] - df['response_b_pronoun_you_count']
     df['type_token_ratio_difference'] = df['response_a_type_token_ratio'] - df['response_b_type_token_ratio']
-    df['syllable_count_difference'] = df['response_a_syllable_count'] - df['response_b_syllable_count']
+    df['flesch_reading_ease_difference'] = df['response_a_flesch_reading_ease'] - df['response_b_flesch_reading_ease']
+    df['flesch_kincaid_grade_difference'] = df['response_a_flesch_kincaid_grade'] - df['response_b_flesch_kincaid_grade']
 
     # Ratios involving prompt and responses
     df['response_a_char_count_to_prompt_char_count_ratio'] = df['response_a_char_count'] / df['prompt_char_count'].replace(0, np.nan)
@@ -162,7 +102,6 @@ def add_basic_features(df):
 
     return df
 
-
 def prepare_data(train_df):
     # Select features
     feature_cols = [col for col in train_df.columns if any(keyword in col for keyword in [
@@ -170,8 +109,7 @@ def prepare_data(train_df):
         '_avg_word_length', '_avg_sentence_length',
         '_exclamation_count', '_question_count', '_comma_count', '_period_count',
         '_semicolon_count', '_colon_count', '_pronoun_I_count', '_pronoun_you_count',
-        '_pronoun_we_count', '_type_token_ratio', '_syllable_count',
-        '_flesch_reading_ease', '_flesch_kincaid_grade',
+        '_pronoun_we_count', '_type_token_ratio', '_flesch_reading_ease', '_flesch_kincaid_grade',
         '_difference', '_ratio'
     ])]
 
@@ -261,8 +199,7 @@ def make_predictions(model, test_df, scaler):
         '_avg_word_length', '_avg_sentence_length',
         '_exclamation_count', '_question_count', '_comma_count', '_period_count',
         '_semicolon_count', '_colon_count', '_pronoun_I_count', '_pronoun_you_count',
-        '_pronoun_we_count', '_type_token_ratio', '_syllable_count',
-        '_flesch_reading_ease', '_flesch_kincaid_grade',
+        '_pronoun_we_count', '_type_token_ratio', '_flesch_reading_ease', '_flesch_kincaid_grade',
         '_difference', '_ratio'
     ])]
 
