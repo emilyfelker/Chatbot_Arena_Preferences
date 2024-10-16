@@ -12,11 +12,21 @@ import matplotlib.pyplot as plt
 # unbias dataset
 
 def load_data(zip_file_path):
-    with zipfile.ZipFile(zip_file_path, 'r') as z:
-        with z.open('train.csv') as train_file:
-            train_df = pd.read_csv(train_file)
-        with z.open('test.csv') as test_file:
-            test_df = pd.read_csv(test_file)
+    try:
+        # First attempt to load data from the zip file (local environment)
+        with zipfile.ZipFile(zip_file_path, 'r') as z:
+            with z.open('train.csv') as train_file:
+                train_df = pd.read_csv(train_file)
+            with z.open('test.csv') as test_file:
+                test_df = pd.read_csv(test_file)
+        print("Data loaded from zip file.")
+    except (FileNotFoundError, zipfile.BadZipFile):
+        # If loading from zip fails, assume we're in the Kaggle environment
+        print("Zip file not found or invalid. Trying to load from /input folder (Kaggle environment).")
+        train_df = pd.read_csv('/kaggle/input/lmsys-chatbot-arena/train.csv')
+        test_df = pd.read_csv('/kaggle/input/lmsys-chatbot-arena/test.csv')
+        print("Data loaded from /input folder.")
+
     return train_df, test_df
 
 
@@ -118,7 +128,7 @@ def make_predictions(model, test_df):
     return submission_df
 
 
-def create_submission_file(submission_df, filename='sample_submission.csv'):
+def create_submission_file(submission_df, filename='submission.csv'):
     submission_df.to_csv(filename, index=False)
     print(f'Submission file saved as {filename}')
 
