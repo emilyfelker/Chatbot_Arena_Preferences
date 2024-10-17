@@ -14,6 +14,7 @@ seaborn = "^0.13.2"
 matplotlib = "^3.9.2"
 jupytext = "^1.16.4"
 textstat = "^0.7.4"
+py-readability-metrics = "^1.4.5"
 
 
 [build-system]

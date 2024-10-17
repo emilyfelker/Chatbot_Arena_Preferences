@@ -5,18 +5,20 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from textstat import textstat
+from time import time
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 ## TODO:
-# streamline code (incl. print statements and comments)
-# check for improving computational efficiency
+# plot to check for bias in dataset (preference for model a or b)
 # unbias dataset
 # try different models
 # feature importance plot
 # update ipython notebook for kaggle
+
+start_time = time()  # to time entire program
 
 def load_data(zip_file_path):
     try: # for local environment
@@ -31,9 +33,17 @@ def load_data(zip_file_path):
     print(f"Data loaded. Train shape: {train_df.shape}, Test shape: {test_df.shape}")
     return train_df, test_df
 
+
 def calculate_features(df):
     inputs = ['prompt', 'response_a', 'response_b']
     feature_dict = {}
+
+    # Pre-compile regex patterns
+    pronoun_patterns = {
+        'pronoun_I_count': re.compile(r'\bI\b', re.IGNORECASE),
+        'pronoun_you_count': re.compile(r'\byou\b', re.IGNORECASE),
+        'pronoun_we_count': re.compile(r'\bwe\b', re.IGNORECASE)
+    }
 
     for col in inputs:
         print(f"Calculating features for {col}...")
@@ -43,54 +53,58 @@ def calculate_features(df):
 
         # Word List and Word Count
         word_list = df[col].str.findall(r'\b\w+\b')
-        feature_dict[f'{col}_word_list'] = word_list
         feature_dict[f'{col}_word_count'] = word_list.str.len()
 
         # Sentence Count
-        sentence_count = df[col].str.count(r'[.!?]+')
-        sentence_count = sentence_count.replace(0, 1)  # Avoid division by zero
+        sentence_count = df[col].str.count(r'[.!?]+').replace(0, 1)
         feature_dict[f'{col}_sentence_count'] = sentence_count
 
         # Average Word Length
         feature_dict[f'{col}_avg_word_length'] = (
-                feature_dict[f'{col}_char_count'] / feature_dict[f'{col}_word_count'].replace(0, np.nan)
+            feature_dict[f'{col}_char_count'] / feature_dict[f'{col}_word_count'].replace(0, np.nan)
         )
 
         # Average Sentence Length (in words)
         feature_dict[f'{col}_avg_sentence_length'] = feature_dict[f'{col}_word_count'] / sentence_count
 
         # Punctuation Counts
-        feature_dict[f'{col}_exclamation_count'] = df[col].str.count('!')
-        feature_dict[f'{col}_question_count'] = df[col].str.count(r'\?')
-        feature_dict[f'{col}_comma_count'] = df[col].str.count(',')
-        feature_dict[f'{col}_period_count'] = df[col].str.count(r'\.')
-        feature_dict[f'{col}_semicolon_count'] = df[col].str.count(';')
-        feature_dict[f'{col}_colon_count'] = df[col].str.count(':')
+        punctuations = {
+            'exclamation_count': '!',
+            'question_count': r'\?',
+            'comma_count': ',',
+            'period_count': r'\.',
+            'semicolon_count': ';',
+            'colon_count': ':'
+        }
 
-        # Personal Pronoun Counts
-        feature_dict[f'{col}_pronoun_I_count'] = df[col].str.count(r'\bI\b', flags=re.IGNORECASE)
-        feature_dict[f'{col}_pronoun_you_count'] = df[col].str.count(r'\byou\b', flags=re.IGNORECASE)
-        feature_dict[f'{col}_pronoun_we_count'] = df[col].str.count(r'\bwe\b', flags=re.IGNORECASE)
+        for punct_name, punct_char in punctuations.items():
+            feature_dict[f'{col}_{punct_name}'] = df[col].str.count(punct_char)
 
-        # Type-Token Ratio
-        feature_dict[f'{col}_type_token_ratio'] = word_list.apply(lambda x: len(set(x)) / max(len(x), 1))
+        # Pronoun Counts using pre-compiled patterns
+        for pronoun_name, pattern in pronoun_patterns.items():
+            feature_dict[f'{col}_{pronoun_name}'] = df[col].str.count(pattern)
+
+        # Type-Token Ratio using vectorized operations
+        all_words = word_list.explode()
+        total_word_counts = feature_dict[f'{col}_word_count']
+        unique_word_counts = all_words.groupby(level=0).nunique()
+        feature_dict[f'{col}_type_token_ratio'] = unique_word_counts / total_word_counts.replace(0, np.nan)
 
         # Readability Scores
-        feature_dict[f'{col}_flesch_reading_ease'] = df[col].apply(
-            lambda text: textstat.flesch_reading_ease(text) if isinstance(text, str) else np.nan
-        )
-        feature_dict[f'{col}_flesch_kincaid_grade'] = df[col].apply(
-            lambda text: textstat.flesch_kincaid_grade(text) if isinstance(text, str) else np.nan
-        )
+        texts = df[col].fillna('')
+        # real ones commented out for now because they are a processing bottleneck
+        # feature_dict[f'{col}_flesch_reading_ease'] = texts.map(textstat.flesch_reading_ease)
+        # feature_dict[f'{col}_flesch_kincaid_grade'] = texts.map(textstat.flesch_kincaid_grade)
+        feature_dict[f'{col}_flesch_reading_ease'] = texts.map(lambda *x : 0.0)
+        feature_dict[f'{col}_flesch_kincaid_grade'] = texts.map(lambda *x : 0.0)
+
 
     # Convert the feature dictionary to a DataFrame and concatenate
     feature_df = pd.DataFrame(feature_dict)
     df = pd.concat([df.reset_index(drop=True), feature_df.reset_index(drop=True)], axis=1)
 
-    # Remove temporary word list columns
-    df.drop(columns=[col for col in df.columns if '_word_list' in col], inplace=True)
-
     return df
+
 
 def calculate_differences_and_ratios(df):
     print("Calculating differences and ratios between inputs...")
@@ -119,10 +133,12 @@ def calculate_differences_and_ratios(df):
     print("Finished calculating differences and ratios.")
     return df
 
+
 def add_basic_features(df):
     df = calculate_features(df)
     df = calculate_differences_and_ratios(df)
     return df
+
 
 def prepare_data(train_df):
     print("Preparing data for training...")
@@ -149,12 +165,14 @@ def prepare_data(train_df):
     print(f"Data prepared: {X_train.shape[0]} training samples, {X_val.shape[0]} validation samples.")
     return X_train, X_val, y_train, y_val, scaler
 
+
 def train_model(X_train, y_train):
     print("Training model...")
     model = LogisticRegression(solver='lbfgs', max_iter=2000)
     model.fit(X_train, y_train)
     print("Model training complete.")
     return model
+
 
 def evaluate_model(model, X_val, y_val):
     print("Evaluating model...")
@@ -165,6 +183,7 @@ def evaluate_model(model, X_val, y_val):
     cm = confusion_matrix(y_val, y_val_pred)
     plot_confusion_matrix(cm)
     print("Model evaluation complete.")
+
 
 def plot_confusion_matrix(cm, filename='confusion_matrix.png'):
     reordered_indices = [0, 2, 1]  # to put the tie case in the middle
@@ -178,6 +197,7 @@ def plot_confusion_matrix(cm, filename='confusion_matrix.png'):
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.clf()
     print(f"Confusion matrix saved as {filename}.")
+
 
 def make_predictions(model, test_df, scaler):
     print("Making predictions on the test set...")
@@ -199,9 +219,11 @@ def make_predictions(model, test_df, scaler):
     print("Test set predictions complete.")
     return submission_df
 
+
 def create_submission_file(submission_df, filename='submission.csv'):
     submission_df.to_csv(filename, index=False)
     print(f"Submission file saved as {filename}")
+
 
 def main():
     train_df, test_df = load_data('data/lmsys-chatbot-arena.zip')
@@ -212,6 +234,9 @@ def main():
     evaluate_model(model, X_val, y_val)
     submission = make_predictions(model, test_df, scaler)
     create_submission_file(submission)
+
+    # Print total runtime
+    print(f"Total runtime: {time() - start_time:.2f} seconds")
 
 if __name__ == '__main__':
     main()
