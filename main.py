@@ -10,6 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from xgboost import XGBClassifier
 
 ## TODO:
 # try different models
@@ -202,11 +203,25 @@ def prepare_data(train_df):
     return X_train, X_val, y_train, y_val, scaler
 
 
-def train_model(X_train, y_train):
-    print("Training model...")
-    model = LogisticRegression(solver='lbfgs', max_iter=2000)
+def train_model(X_train, y_train, model_config):
+    """
+    Train a model based on the model_config dictionary.
+
+    model_config should contain:
+      - 'type': A string specifying the type of model ('logistic_regression' or 'xgboost_rf')
+      - Other hyperparameters specific to the model
+    """
+    print(f"Training model: {model_config['type']}")
+
+    if model_config['type'] == 'logistic_regression':
+        model = LogisticRegression(**model_config.get('params', {}))
+    elif model_config['type'] == 'xgboost_rf':
+        model = XGBClassifier(**model_config.get('params', {}))
+    else:
+        raise ValueError(f"Unknown model type: {model_config['type']}")
+
     model.fit(X_train, y_train)
-    print("Model training complete.")
+    print(f"Model training complete: {model_config['type']}")
     return model
 
 
@@ -261,20 +276,35 @@ def create_submission_file(submission_df, filename='submission.csv'):
     print(f"Submission file saved as {filename}")
 
 
-def main():
+def main(models_to_train):
     train_df, test_df = load_data('data/lmsys-chatbot-arena.zip')
     train_df = create_target_column(train_df)
     plot_bias_in_dataset(train_df, 'bias_distribution.png')
     train_df = add_basic_features(train_df)
     test_df = add_basic_features(test_df)
     X_train, X_val, y_train, y_val, scaler = prepare_data(train_df)
-    model = train_model(X_train, y_train)
-    evaluate_model(model, X_val, y_val)
-    submission = make_predictions(model, test_df, scaler)
+
+    for model_config in models_to_train:
+        print(f"Training {model_config['type']} with params: {model_config['params']}")
+        model = train_model(X_train, y_train, model_config)
+        evaluate_model(model, X_val, y_val)
+
+    submission = make_predictions(model, test_df, scaler)  # using the last/most recently trained model?
     create_submission_file(submission)
 
     # Print total runtime
     print(f"Total runtime: {time() - start_time:.2f} seconds")
 
 if __name__ == '__main__':
-    main()
+    models_to_train = [
+        {'type': 'logistic_regression', 'params': {'solver': 'lbfgs', 'max_iter': 2000}},
+        {'type': 'xgboost_rf', 'params': {'n_estimators': 100, 'max_depth': 6, 'random_state': 42}},
+        {'type': 'xgboost_rf', 'params': {'n_estimators': 50, 'max_depth': 4, 'random_state': 42}},
+        {'type': 'xgboost_rf', 'params': {'n_estimators': 100, 'max_depth': 4, 'random_state': 42}},
+        {'type': 'xgboost_rf', 'params': {'n_estimators': 50, 'max_depth': 6, 'random_state': 42}},
+        {'type': 'xgboost_rf', 'params': {'n_estimators': 100, 'max_depth': 6, 'random_state': 42}},
+        {'type': 'xgboost_rf', 'params': {'n_estimators': 50, 'max_depth': 8, 'random_state': 42}},
+        {'type': 'xgboost_rf', 'params': {'n_estimators': 100, 'max_depth': 8, 'random_state': 42}}
+    ]
+
+    main(models_to_train)
