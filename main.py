@@ -34,6 +34,27 @@ def load_data(zip_file_path):
     return train_df, test_df
 
 
+def create_target_column(df):
+    df['target'] = df.apply(
+        lambda row: 0 if row['winner_model_a'] == 1 else (1 if row['winner_model_b'] == 1 else 2), axis=1
+    )
+    return df
+
+
+def plot_bias_in_dataset(train_df, filename='bias_distribution.png'):
+    plt.figure(figsize=(6, 4))
+    blue_shade = sns.color_palette("Blues")[4]
+    sns.countplot(x='target', data=train_df, color=blue_shade, order=[0, 2, 1])
+    plt.title("Distribution of User Preferences")
+    plt.xlabel("Preference")
+    plt.ylabel("Count")
+    plt.xticks([0, 1, 2], ['Model A', 'Tie', 'Model B'])
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.clf()
+    print(f"Bias distribution plot saved as {filename}")
+
+
 def calculate_features(df):
     inputs = ['prompt', 'response_a', 'response_b']
     feature_dict = {}
@@ -227,6 +248,8 @@ def create_submission_file(submission_df, filename='submission.csv'):
 
 def main():
     train_df, test_df = load_data('data/lmsys-chatbot-arena.zip')
+    train_df = create_target_column(train_df)
+    plot_bias_in_dataset(train_df, 'bias_distribution.png')
     train_df = add_basic_features(train_df)
     test_df = add_basic_features(test_df)
     X_train, X_val, y_train, y_val, scaler = prepare_data(train_df)
