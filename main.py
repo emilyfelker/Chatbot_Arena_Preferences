@@ -12,8 +12,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 ## TODO:
-# plot to check for bias in dataset (preference for model a or b)
-# unbias dataset
 # try different models
 # feature importance plot
 # update ipython notebook for kaggle
@@ -44,11 +42,28 @@ def create_target_column(df):
 def plot_bias_in_dataset(train_df, filename='bias_distribution.png'):
     plt.figure(figsize=(6, 4))
     blue_shade = sns.color_palette("Blues")[4]
-    sns.countplot(x='target', data=train_df, color=blue_shade, order=[0, 2, 1])
+    ax = sns.countplot(x='target', data=train_df, color=blue_shade, order=[0, 2, 1])
     plt.title("Distribution of User Preferences")
     plt.xlabel("Preference")
     plt.ylabel("Count")
     plt.xticks([0, 1, 2], ['Model A', 'Tie', 'Model B'])
+
+    # Calculate total number of rows to compute percentages
+    total = len(train_df)
+
+    # Adjust the y-limit to give more space for the percentages above the bars
+    max_height = max([p.get_height() for p in ax.patches])  # Get the max height of the bars
+    ax.set_ylim(0, max_height * 1.15)  # Increase the y-limit by 15% to avoid overlap
+
+    # Annotate percentages on the bars
+    for p in ax.patches:
+        height = p.get_height()
+        percentage = f'{100 * height / total:.1f}%'
+        ax.annotate(percentage,
+                    (p.get_x() + p.get_width() / 2., height),
+                    ha='center', va='bottom', fontsize=12, color='black', xytext=(0, 5),
+                    textcoords='offset points')  # Move the text 5 points above the bar
+
     plt.tight_layout()
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.clf()
