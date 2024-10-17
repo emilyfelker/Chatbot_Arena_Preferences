@@ -1,14 +1,14 @@
-import pandas as pd
-import zipfile
 import re
-from sklearn.model_selection import train_test_split
+import zipfile
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+from textstat import textstat
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, confusion_matrix
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-import textstat
 
 ## TODO:
 # streamline code (incl. print statements and comments)
@@ -19,29 +19,21 @@ import textstat
 # update ipython notebook for kaggle
 
 def load_data(zip_file_path):
-    print("Loading data...")
-    try:
-        # First attempt to load data from the zip file (local environment)
+    try: # for local environment
         with zipfile.ZipFile(zip_file_path, 'r') as z:
             with z.open('train.csv') as train_file:
                 train_df = pd.read_csv(train_file)
             with z.open('test.csv') as test_file:
                 test_df = pd.read_csv(test_file)
-        print("Data loaded from zip file.")
-    except (FileNotFoundError, zipfile.BadZipFile):
-        # If loading from zip fails, assume we're in the Kaggle environment
-        print("Zip file not found or invalid. Trying to load from /input folder (Kaggle environment).")
+    except (FileNotFoundError, zipfile.BadZipFile): # for Kaggle environment
         train_df = pd.read_csv('/kaggle/input/lmsys-chatbot-arena/train.csv')
         test_df = pd.read_csv('/kaggle/input/lmsys-chatbot-arena/test.csv')
-        print("Data loaded from /input folder.")
-    print(f"Train shape: {train_df.shape}, Test shape: {test_df.shape}")
+    print(f"Data loaded. Train shape: {train_df.shape}, Test shape: {test_df.shape}")
     return train_df, test_df
 
 def calculate_features(df):
     inputs = ['prompt', 'response_a', 'response_b']
-    print("Calculating basic features for each input...")
-
-    feature_dict = {}  # Dictionary to hold all new features
+    feature_dict = {}
 
     for col in inputs:
         print(f"Calculating features for {col}...")
@@ -60,7 +52,9 @@ def calculate_features(df):
         feature_dict[f'{col}_sentence_count'] = sentence_count
 
         # Average Word Length
-        feature_dict[f'{col}_avg_word_length'] = feature_dict[f'{col}_char_count'] / feature_dict[f'{col}_word_count'].replace(0, np.nan)
+        feature_dict[f'{col}_avg_word_length'] = (
+                feature_dict[f'{col}_char_count'] / feature_dict[f'{col}_word_count'].replace(0, np.nan)
+        )
 
         # Average Sentence Length (in words)
         feature_dict[f'{col}_avg_sentence_length'] = feature_dict[f'{col}_word_count'] / sentence_count
@@ -81,19 +75,21 @@ def calculate_features(df):
         # Type-Token Ratio
         feature_dict[f'{col}_type_token_ratio'] = word_list.apply(lambda x: len(set(x)) / max(len(x), 1))
 
-        # Readability Scores using textstat
-        feature_dict[f'{col}_flesch_reading_ease'] = df[col].apply(lambda text: textstat.flesch_reading_ease(text) if isinstance(text, str) else np.nan)
-        feature_dict[f'{col}_flesch_kincaid_grade'] = df[col].apply(lambda text: textstat.flesch_kincaid_grade(text) if isinstance(text, str) else np.nan)
+        # Readability Scores
+        feature_dict[f'{col}_flesch_reading_ease'] = df[col].apply(
+            lambda text: textstat.flesch_reading_ease(text) if isinstance(text, str) else np.nan
+        )
+        feature_dict[f'{col}_flesch_kincaid_grade'] = df[col].apply(
+            lambda text: textstat.flesch_kincaid_grade(text) if isinstance(text, str) else np.nan
+        )
 
     # Convert the feature dictionary to a DataFrame and concatenate
     feature_df = pd.DataFrame(feature_dict)
     df = pd.concat([df.reset_index(drop=True), feature_df.reset_index(drop=True)], axis=1)
 
-    # Remove temporary columns like word lists
-    print([col for col in df.columns if '_word_list' in col])
+    # Remove temporary word list columns
     df.drop(columns=[col for col in df.columns if '_word_list' in col], inplace=True)
 
-    print("Finished calculating basic features.")
     return df
 
 def calculate_differences_and_ratios(df):
@@ -106,34 +102,26 @@ def calculate_differences_and_ratios(df):
                       'colon_count', 'pronoun_I_count', 'pronoun_you_count', 'pronoun_we_count', 'type_token_ratio',
                       'flesch_reading_ease', 'flesch_kincaid_grade']
 
-    diff_ratio_dict = {}  # Dictionary to hold difference and ratio features
+    diff_ratio_dict = {}
 
     for feature in basic_features:
         for col1, col2 in pairs:
             diff = df[f'{col1}_{feature}'] - df[f'{col2}_{feature}']
             ratio = df[f'{col1}_{feature}'] / df[f'{col2}_{feature}'].replace(0, np.nan)
 
-            # Add to the dictionary with full arrays
             diff_ratio_dict[f'{col1}_{col2}_{feature}_difference'] = diff
             diff_ratio_dict[f'{col1}_{col2}_{feature}_ratio'] = ratio
 
-    # Convert the difference and ratio dictionary to a DataFrame
     diff_ratio_df = pd.DataFrame(diff_ratio_dict)
-
-    # Ensure the index is passed explicitly to avoid scalar errors
     diff_ratio_df.index = df.index
 
-    # Concatenate the differences and ratios DataFrame to the original DataFrame
     df = pd.concat([df.reset_index(drop=True), diff_ratio_df.reset_index(drop=True)], axis=1)
-
     print("Finished calculating differences and ratios.")
     return df
 
 def add_basic_features(df):
-    print("Adding basic features...")
     df = calculate_features(df)
     df = calculate_differences_and_ratios(df)
-    print("Finished adding features.")
     return df
 
 def prepare_data(train_df):
@@ -147,7 +135,9 @@ def prepare_data(train_df):
         '_difference', '_ratio'
     ])]
 
-    train_df['target'] = train_df.apply(lambda row: 0 if row['winner_model_a'] == 1 else (1 if row['winner_model_b'] == 1 else 2), axis=1)
+    train_df['target'] = train_df.apply(
+        lambda row: 0 if row['winner_model_a'] == 1 else (1 if row['winner_model_b'] == 1 else 2), axis=1
+    )
     X = train_df[feature_cols]
     y = train_df['target']
     X = X.fillna(0)
@@ -177,7 +167,7 @@ def evaluate_model(model, X_val, y_val):
     print("Model evaluation complete.")
 
 def plot_confusion_matrix(cm, filename='confusion_matrix.png'):
-    reordered_indices = [0, 2, 1]
+    reordered_indices = [0, 2, 1]  # to put the tie case in the middle
     reordered_cm = cm[reordered_indices][:, reordered_indices]
     cm_relative = reordered_cm.astype('float') / reordered_cm.sum(axis=1)[:, np.newaxis]
     labels = ['Model A Wins', 'Tie', 'Model B Wins']
@@ -214,9 +204,7 @@ def create_submission_file(submission_df, filename='submission.csv'):
     print(f"Submission file saved as {filename}")
 
 def main():
-    print("Starting main program...")
     train_df, test_df = load_data('data/lmsys-chatbot-arena.zip')
-    print("Adding features to the train and test data...")
     train_df = add_basic_features(train_df)
     test_df = add_basic_features(test_df)
     X_train, X_val, y_train, y_val, scaler = prepare_data(train_df)
