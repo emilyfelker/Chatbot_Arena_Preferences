@@ -13,9 +13,9 @@ from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
 ## TODO:
-# try different models
-# feature importance plot
-# update ipython notebook for kaggle
+# streamline code
+# consider adding a few more features
+# update ipython notebook for kaggle and test that
 
 start_time = time()  # to time entire program
 
