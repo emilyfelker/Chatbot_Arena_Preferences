@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import nltk
+from nltk.translate.bleu_score import sentence_bleu
+from nltk.translate.bleu_score import SmoothingFunction
 # from textstat import textstat  # May remove later since hard to implement in Kaggle
 from time import time
 from sklearn.linear_model import LogisticRegression
@@ -13,7 +16,8 @@ from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
 # TODO:
-# Consider adding a few more features
+# Add means in addition to ratios and differences
+# Add bleu scores b_a and mean
 # Update notebook for Kaggle and test that
 
 def load_data(zip_file_path):
@@ -139,6 +143,24 @@ def calculate_features(df):
     return df
 
 
+def calculate_bleu_score(df):
+    print("Calculating BLEU score between Model A and Model B responses...")
+
+    # Tokenize responses for BLEU score calculation using list comprehensions
+    response_a_tokenized = [nltk.word_tokenize(text) for text in df['response_a'].fillna('')]
+    response_b_tokenized = [nltk.word_tokenize(text) for text in df['response_b'].fillna('')]
+
+    smoothing_function = SmoothingFunction().method1
+
+    # Calculate BLEU score for each row using list comprehension
+    df['bleu_score_a_b'] = [
+        sentence_bleu([response_b_tokenized[i]], response_a_tokenized[i], smoothing_function=smoothing_function)
+        for i in range(len(response_a_tokenized))
+    ]
+    print("BLEU score calculation complete.")
+    return df
+
+
 def calculate_differences_and_ratios(df):
     print("Calculating differences and ratios between inputs...")
 
@@ -170,6 +192,7 @@ def calculate_differences_and_ratios(df):
 def add_basic_features(df):
     df = calculate_features(df)
     df = calculate_differences_and_ratios(df)
+    df = calculate_bleu_score(df)
     return df
 
 
@@ -181,7 +204,7 @@ def prepare_data(train_df):
         '_exclamation_count', '_question_count', '_comma_count', '_period_count',
         '_semicolon_count', '_colon_count', '_pronoun_I_count', '_pronoun_you_count',
         '_pronoun_we_count', '_type_token_ratio', '_flesch_reading_ease', '_flesch_kincaid_grade',
-        '_difference', '_ratio'
+        '_difference', '_ratio', 'bleu_score'
     ])]
 
     train_df['target'] = train_df.apply(
@@ -288,7 +311,7 @@ def make_predictions(model, test_df, scaler):
         '_exclamation_count', '_question_count', '_comma_count', '_period_count',
         '_semicolon_count', '_colon_count', '_pronoun_I_count', '_pronoun_you_count',
         '_pronoun_we_count', '_type_token_ratio', '_flesch_reading_ease', '_flesch_kincaid_grade',
-        '_difference', '_ratio'
+        '_difference', '_ratio', 'bleu_score'
     ])]
     X_test = test_df[feature_cols].fillna(0)
     X_test_scaled = scaler.transform(X_test)
@@ -325,7 +348,7 @@ def main(models_to_train):
         '_exclamation_count', '_question_count', '_comma_count', '_period_count',
         '_semicolon_count', '_colon_count', '_pronoun_I_count', '_pronoun_you_count',
         '_pronoun_we_count', '_type_token_ratio', '_flesch_reading_ease', '_flesch_kincaid_grade',
-        '_difference', '_ratio'
+        '_difference', '_ratio', 'bleu_score'
     ])]
 
     # Prepare the training and validation sets from the train DataFrame
