@@ -45,24 +45,27 @@ semantics.*
 
 Three key visualizations are included in this project:
 
-1. **Bias Distribution Plot**: Shows 
-   how often users preferred model A 
-   or model B or chose a tie.
+### Bias Distribution Plot
    ![Bias Distribution](bias_distribution.png)
-The training dataset is fairly well 
+This plot shows 
+   how often users preferred model A 
+   or model B or chose a tie. The 
+   training dataset is fairly well 
    balanced but contains relatively 
    fewer ties. So far, in this 
    project, I haven't taken further 
    steps to unbias the training data.
 
 
-2. **Feature Importance Plot**: 
-   Highlights which features had the 
-   biggest impact on the winning 
-   model's predictions.
+### Feature Importance Plot 
+
    ![Feature Importance](evaluation_feature_importance.png)
-   The most important 
-   predictor by far is the 
+   This plot highlights which features 
+   had the 
+   biggest impact on the winning 
+   model's predictions. The most 
+   important 
+   feature by far is the 
    difference in response length,
    as indicated by character count. 
    The BLEU score is also important, 
@@ -71,9 +74,14 @@ The training dataset is fairly well
    (near-)identical responses.
 
 
-3. **Confusion Matrix**: Displays how well the model predicted user preferences.
+### Confusion Matrix
    ![Confusion Matrix](evaluation_confusion_matrix.png)
-The winning model still struggles with 
+This plot displays how 
+well the model predicted user 
+   preferences by comparing the true 
+   vs. predicted classes.
+   The winning model still 
+   struggles with 
    correctly predicting ties, though 
    it performs decently when predicting 
    model A or model B wins.

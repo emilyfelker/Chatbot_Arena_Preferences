@@ -14,8 +14,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
-# TODO:
-# Add ReadME for GitHub
 
 def load_data(zip_file_path):
     try: # for local environment
