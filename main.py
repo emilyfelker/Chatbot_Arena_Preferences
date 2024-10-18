@@ -15,8 +15,6 @@ from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
 # TODO:
-# Remove basic features now that means have been implemented
-# Update notebook for Kaggle and test that
 # Add ReadME for GitHub
 
 def load_data(zip_file_path):
@@ -132,9 +130,8 @@ def calculate_features(df):
         # Real ones commented out for now because they are a processing bottleneck & hard to use in Kaggle
         # feature_dict[f'{col}_flesch_reading_ease'] = texts.map(textstat.flesch_reading_ease)
         # feature_dict[f'{col}_flesch_kincaid_grade'] = texts.map(textstat.flesch_kincaid_grade)
-        feature_dict[f'{col}_flesch_reading_ease'] = texts.map(lambda *x : 0.0)
-        feature_dict[f'{col}_flesch_kincaid_grade'] = texts.map(lambda *x : 0.0)
-
+        feature_dict[f'{col}_flesch_reading_ease'] = texts.map(lambda *x : 0.0)  # dummy score
+        feature_dict[f'{col}_flesch_kincaid_grade'] = texts.map(lambda *x : 0.0)  # dummy score
 
     # Convert the feature dictionary to a DataFrame and concatenate
     feature_df = pd.DataFrame(feature_dict)
