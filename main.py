@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from textstat import textstat
+# from textstat import textstat  # May remove later since hard to implement in Kaggle
 from time import time
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, confusion_matrix
@@ -12,12 +12,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBClassifier
 
-## TODO:
-# streamline code
-# consider adding a few more features
-# update ipython notebook for kaggle and test that
-
-start_time = time()  # to time entire program
+# TODO:
+# Consider adding a few more features
+# Update notebook for Kaggle and test that
 
 def load_data(zip_file_path):
     try: # for local environment
@@ -129,17 +126,16 @@ def calculate_features(df):
 
         # Readability Scores
         texts = df[col].fillna('')
-        #real ones commented out for now because they are a processing bottleneck
-        feature_dict[f'{col}_flesch_reading_ease'] = texts.map(textstat.flesch_reading_ease)
-        feature_dict[f'{col}_flesch_kincaid_grade'] = texts.map(textstat.flesch_kincaid_grade)
-        # feature_dict[f'{col}_flesch_reading_ease'] = texts.map(lambda *x : 0.0)
-        # feature_dict[f'{col}_flesch_kincaid_grade'] = texts.map(lambda *x : 0.0)
+        # Real ones commented out for now because they are a processing bottleneck & hard to use in Kaggle
+        # feature_dict[f'{col}_flesch_reading_ease'] = texts.map(textstat.flesch_reading_ease)
+        # feature_dict[f'{col}_flesch_kincaid_grade'] = texts.map(textstat.flesch_kincaid_grade)
+        feature_dict[f'{col}_flesch_reading_ease'] = texts.map(lambda *x : 0.0)
+        feature_dict[f'{col}_flesch_kincaid_grade'] = texts.map(lambda *x : 0.0)
 
 
     # Convert the feature dictionary to a DataFrame and concatenate
     feature_df = pd.DataFrame(feature_dict)
     df = pd.concat([df.reset_index(drop=True), feature_df.reset_index(drop=True)], axis=1)
-
     return df
 
 
@@ -237,7 +233,9 @@ def evaluate_model(model, X_val, y_val, model_type=None, feature_names=None,
         plot_confusion_matrix(cm, f'{filename_prefix}_confusion_matrix.png')
         print("Confusion matrix plotted.")
     if plot_features and model_type and feature_names:
-        plot_feature_importance(model, feature_names, model_type, top_n=top_n, filename=f'{filename_prefix}_feature_importance.png')
+        plot_feature_importance(
+            model, feature_names, model_type, top_n=top_n, filename=f'{filename_prefix}_feature_importance.png'
+        )
         print("Feature importance plotted.")
     print("Model evaluation complete.")
     return loss
@@ -309,15 +307,18 @@ def create_submission_file(submission_df, filename='submission.csv'):
 
 
 def main(models_to_train):
+    # Load data and prepare target column
     train_df, test_df = load_data('data/lmsys-chatbot-arena.zip')
     train_df = create_target_column(train_df)
+
+    # Explore data
     plot_bias_in_dataset(train_df, 'bias_distribution.png')
 
     # Add features to the train and test DataFrames
     train_df = add_basic_features(train_df)
     test_df = add_basic_features(test_df)
 
-    # Extract feature names after features have been added
+    # Extract feature names
     feature_names = [col for col in train_df.columns if any(keyword in col for keyword in [
         '_char_count', '_word_count', '_sentence_count',
         '_avg_word_length', '_avg_sentence_length',
@@ -327,7 +328,7 @@ def main(models_to_train):
         '_difference', '_ratio'
     ])]
 
-    # Prepare the training and validation sets
+    # Prepare the training and validation sets from the train DataFrame
     X_train, X_val, y_train, y_val, scaler = prepare_data(train_df)
 
     # Train and evaluate the models
@@ -335,7 +336,7 @@ def main(models_to_train):
     for model_config in models_to_train:
         print(f"Training {model_config['type']} with params: {model_config['params']}")
         model = train_model(X_train, y_train, model_config)
-        loss = evaluate_model(model, X_val, y_val)  # No plotting during model comparison
+        loss = evaluate_model(model, X_val, y_val)
         evaluation_results.append({'model': model, 'log_loss': loss, 'config': model_config})
 
     # Identify the best model based on log loss
@@ -343,13 +344,12 @@ def main(models_to_train):
     best_model = best_result['model']
     best_log_loss = best_result['log_loss']
     best_config = best_result['config']
-
     print("\nBest Model Selected:")
     print(f"Type: {best_config['type']}")
     print(f"Parameters: {best_config['params']}")
     print(f"Validation Log Loss: {best_log_loss}")
 
-    # Evaluate the best model, plot the confusion matrix and feature importance
+    # Evaluate the best model and plot the confusion matrix and feature importance
     evaluate_model(best_model, X_val, y_val, model_type=best_config['type'],
                    feature_names=feature_names, plot_confusion=True, plot_features=True, top_n=15)
 
@@ -357,11 +357,11 @@ def main(models_to_train):
     submission = make_predictions(best_model, test_df, scaler)
     create_submission_file(submission)
 
-    # Print total runtime
-    print(f"Total runtime: {time() - start_time:.2f} seconds")
 
 if __name__ == '__main__':
-    models_to_train = [
+    start_time = time()
+
+    models = [
         {'type': 'logistic_regression', 'params': {'solver': 'lbfgs', 'max_iter': 2000}},
         {'type': 'xgboost_rf', 'params': {'n_estimators': 50, 'max_depth': 4, 'random_state': 42}},
         {'type': 'xgboost_rf', 'params': {'n_estimators': 100, 'max_depth': 4, 'random_state': 42}},
@@ -371,4 +371,6 @@ if __name__ == '__main__':
         {'type': 'xgboost_rf', 'params': {'n_estimators': 100, 'max_depth': 8, 'random_state': 42}}
     ]
 
-    main(models_to_train)
+    main(models)
+
+    print(f"Total runtime: {time() - start_time:.2f} seconds")
