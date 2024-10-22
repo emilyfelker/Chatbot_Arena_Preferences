@@ -49,16 +49,18 @@ machine learning models:
   Regression** using 
   LogisticRegression from `sklearn` 
 - **Gradiented-boosted decision 
-  trees** using XGBoost from 
-  `sklearn` 
+  trees** using XGBoostClassifier from 
+  `xgboost` 
 
 ### Evaluating model performance
-This program automatically trains, 
-evaluates, and compares the log loss 
+This program evaluates and compares the 
+log loss 
 of models whose name and parameters 
 are manually specified in a 
 dictionary passed into the main 
-function.
+function, and it selects the model 
+with the best score to generate the 
+final predictions for Kaggle.
 The best model so far was an 
 xgboost_rf with parameters 
 {'n_estimators': 50, 
@@ -89,7 +91,7 @@ This plot shows
    ![Feature Importance](evaluation_feature_importance.png)
    This plot highlights which features 
    had the 
-   biggest impact on the winning 
+   biggest impact on the  
    model's predictions. The most 
    important 
    feature by far is the 
@@ -107,7 +109,7 @@ This plot displays how
 well the model predicted user 
    preferences by comparing the true 
    vs. predicted classes.
-   The winning model still 
+   The model still 
    struggles with 
    correctly predicting ties, though 
    it performs decently when predicting 
@@ -128,4 +130,6 @@ by:
 * Trying additional types of 
   machine learning models
 * Exploring the effects of varying 
-  model parameters more systematically
+  model parameters more 
+  systematically with a grid search
+* Implementing cross-validation to better assess model generalization and prevent overfitting to the validation set
