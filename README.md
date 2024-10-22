@@ -3,7 +3,7 @@
 ## Introduction
 This program is designed for the
 [Chatbot Arena Human Preferences 
-Prediction competition on Kaggle](https://www.kaggle.com/competitions/lmsys-chatbot-arena).
+Prediction](https://www.kaggle.com/competitions/lmsys-chatbot-arena) competition on Kaggle.
 The challenge is to predict which 
 chatbot responses users prefer, 
 based on a dataset of 
