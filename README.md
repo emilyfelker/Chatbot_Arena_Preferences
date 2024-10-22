@@ -91,10 +91,9 @@ This plot shows
    ![Feature Importance](evaluation_feature_importance.png)
    This plot highlights which features 
    had the 
-   biggest impact on the  
-   model's predictions. The most 
-   important 
-   feature by far is the 
+   biggest impact on the model's 
+   predictions. The most 
+   important feature by far is the 
    difference in response length,
    as indicated by character count. 
    The BLEU score is also important, 
